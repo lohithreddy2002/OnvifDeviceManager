@@ -37,7 +37,7 @@ struct _GstRtspPlayerClass
 };
 
 GstRtspPlayer * GstRtspPlayer__new ();
-void GstRtspPlayer__play(GstRtspPlayer* self, char *url, char * user, char * pass, char * fallback_host, char * fallback_port, void * user_data);
+void GstRtspPlayer__play(GstRtspPlayer* self, char *url, char * user, char * pass, char * rtspport, char * fallback_host, char * fallback_port, void * user_data);
 void GstRtspPlayer__stop(GstRtspPlayer* self);
 GtkWidget * GstRtspPlayer__createCanvas(GstRtspPlayer *self);
 gboolean GstRtspPlayer__is_mic_mute(GstRtspPlayer* self);

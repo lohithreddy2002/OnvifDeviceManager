@@ -3,6 +3,7 @@
 #include "../gui_utils.h"
 #include "../../utils/encryption_utils.h"
 #include "clogger.h"
+#include <errno.h>
 
 #define ONVIFMGR_ENCRYPTEDSTORE_FILE_PATH "onvifmgr_store.bin"
 

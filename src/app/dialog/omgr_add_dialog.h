@@ -25,6 +25,7 @@ const char * OnvifMgrAddDialog__get_port(OnvifMgrAddDialog * self);
 const char * OnvifMgrAddDialog__get_user(OnvifMgrAddDialog * self);
 const char * OnvifMgrAddDialog__get_pass(OnvifMgrAddDialog * self);
 const char * OnvifMgrAddDialog__get_protocol(OnvifMgrAddDialog * self);
+const char * OnvifMgrAddDialog__get_rtsp_port(OnvifMgrAddDialog * self);
 
 G_END_DECLS
 
