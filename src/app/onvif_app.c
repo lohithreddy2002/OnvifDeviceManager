@@ -242,9 +242,15 @@ void _play_onvif_stream(QueueEvent * qevt, void * user_data){
         OnvifCredentials * ocreds = OnvifDevice__get_credentials(odev);
         char * user = OnvifCredentials__get_username(ocreds);
         char * pass = OnvifCredentials__get_password(ocreds);
-        char * port = OnvifDevice__get_port(OnvifMgrDeviceRow__get_device(device));
-        char * host = OnvifDevice__get_host(OnvifMgrDeviceRow__get_device(device));
-        GstRtspPlayer__play(priv->player,OnvifUri__get_uri(media_uri),user,pass,host,port, device);
+        char * port = OnvifDevice__get_port(OnvifMgrDeviceRow__get_device(device)); // This is the ONVIF service port, used as fallback_port
+        char * host = OnvifDevice__get_host(OnvifMgrDeviceRow__get_device(device)); // This is the ONVIF service host, used as fallback_host
+        char * rtsp_port = NULL;
+        g_object_get(G_OBJECT(device), "rtsp-port", &rtsp_port, NULL);
+
+        GstRtspPlayer__play(priv->player,OnvifUri__get_uri(media_uri),user,pass, rtsp_port, host,port, device);
+
+        if(rtsp_port)
+            g_free(rtsp_port);
         if(pass)
             free(pass);
         if(user)
@@ -344,6 +350,7 @@ void _onvif_device_add(QueueEvent * qevt, void * user_data){
         goto exit;
     }
     OnvifDevice__set_credentials(onvif_dev,OnvifMgrAddDialog__get_user(dialog),OnvifMgrAddDialog__get_pass(dialog));
+    const char * rtsp_port_str = OnvifMgrAddDialog__get_rtsp_port(dialog);
    
     /* Authentication check */
     GtkWidget * omgr_device;
@@ -360,7 +367,7 @@ void _onvif_device_add(QueueEvent * qevt, void * user_data){
     switch(fault){
         case SOAP_FAULT_NONE:
             //Extract scope
-            omgr_device = OnvifMgrDeviceRow__new(app, onvif_dev, NULL, NULL, NULL);
+            omgr_device = OnvifMgrDeviceRow__new(app, onvif_dev, NULL, NULL, NULL, (char *)rtsp_port_str);
             OnvifMgrDeviceRow__load_scopedata(ONVIFMGR_DEVICEROW(omgr_device));
             gdk_threads_add_idle(G_SOURCE_FUNC(idle_add_device),omgr_device);
             break;
@@ -415,7 +422,7 @@ static gboolean OnvifApp__disocvery_found_server_cb (DiscoveryEvent * event) {
             char * hardware = onvif_extract_scope("hardware",m);
             char * location = onvif_extract_scope("location",m);
             
-            GtkWidget * omgr_device = OnvifMgrDeviceRow__new(app,onvif_dev,name,hardware,location);
+            GtkWidget * omgr_device = OnvifMgrDeviceRow__new(app,onvif_dev,name,hardware,location, NULL); // Pass NULL for rtsp_port
             OnvifApp__add_device(app,ONVIFMGR_DEVICEROW(omgr_device));
             free(name);
             free(hardware);

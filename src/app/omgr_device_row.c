@@ -13,6 +13,7 @@
 #define OMGR_DEVICE_NAME_PREFIX "NAME:"
 #define OMGR_DEVICE_HW_PREFIX "HW:"
 #define OMGR_DEVICE_LOC_PREFIX "LOC:"
+#define OMGR_DEVICE_RTSP_PORT_PREFIX "RTSP_PORT:"
 
 extern char _binary_locked_icon_png_size[];
 extern char _binary_locked_icon_png_start[];
@@ -33,6 +34,7 @@ enum
     PROP_NAME = 3,
     PROP_HARDWARE = 4,
     PROP_LOCATION = 5,
+    PROP_RTSP_PORT = 6,
     N_PROPERTIES
 };
 
@@ -58,6 +60,7 @@ typedef struct {
     GtkWidget * lbl_location;
     GtkWidget * image;
     GtkWidget * image_handle;
+    char * rtsp_port;
 } OnvifMgrDeviceRowPrivate;
 
 static guint signals[LAST_SIGNAL] = { 0 };
@@ -118,6 +121,7 @@ OnvifMgrDeviceRow__serialize (OnvifMgrSerializable  *self, int * serialized_leng
         const char * location = gtk_label_get_text(GTK_LABEL(priv->lbl_location));
         const char * hardware = gtk_label_get_text(GTK_LABEL(priv->lbl_hardware));
         const char * name = gtk_label_get_text(GTK_LABEL(priv->lbl_name));
+        const char * rtsp_port = priv->rtsp_port;
 
         int len = strlen(OMGR_DEVICE_URL_PREFIX);
         len += strlen(url) + 1;
@@ -136,6 +140,10 @@ OnvifMgrDeviceRow__serialize (OnvifMgrSerializable  *self, int * serialized_leng
         len += strlen(hardware) + 1;
         len += strlen(OMGR_DEVICE_LOC_PREFIX);
         len += strlen(location) + 1;
+        if(rtsp_port && strlen(rtsp_port) > 0){
+            len += strlen(OMGR_DEVICE_RTSP_PORT_PREFIX);
+            len += strlen(rtsp_port) +1;
+        }
 
         output = malloc(len);
         *serialized_length = 0;
@@ -174,6 +182,12 @@ OnvifMgrDeviceRow__serialize (OnvifMgrSerializable  *self, int * serialized_leng
             *serialized_length += strlen(pass)+1;
             free(pass);
         }
+        if(rtsp_port && strlen(rtsp_port) > 0){
+            memcpy(&output[*serialized_length],OMGR_DEVICE_RTSP_PORT_PREFIX,strlen(OMGR_DEVICE_RTSP_PORT_PREFIX));
+            *serialized_length += strlen(OMGR_DEVICE_RTSP_PORT_PREFIX);
+            memcpy(&output[*serialized_length],rtsp_port,strlen(rtsp_port)+1);
+            *serialized_length += strlen(rtsp_port)+1;
+        }
 
     } else {
         output = malloc(strlen(url)+1);
@@ -194,6 +208,7 @@ OnvifMgrDeviceRow__unserialize (unsigned char * data, int length){
     char * name = NULL;
     char * location = NULL;
     char * hardware = NULL;
+    char * rtsp_port = NULL;
 
     while(data_read < length){
         int line_len = strlen((char*)&data[data_read])+1;
@@ -210,6 +225,8 @@ OnvifMgrDeviceRow__unserialize (unsigned char * data, int length){
             hardware = (char*) &data[data_read + strlen(OMGR_DEVICE_HW_PREFIX)];
         } else if(strncmp((char *)&data[data_read], OMGR_DEVICE_LOC_PREFIX, strlen(OMGR_DEVICE_LOC_PREFIX)) == 0){
             location = (char*) &data[data_read + strlen(OMGR_DEVICE_LOC_PREFIX)];
+        } else if(strncmp((char *)&data[data_read], OMGR_DEVICE_RTSP_PORT_PREFIX, strlen(OMGR_DEVICE_RTSP_PORT_PREFIX)) == 0){
+            rtsp_port = (char*) &data[data_read + strlen(OMGR_DEVICE_RTSP_PORT_PREFIX)];
         } 
         data_read += line_len;
     }
@@ -226,7 +243,16 @@ OnvifMgrDeviceRow__unserialize (unsigned char * data, int length){
     if(user) OnvifCredentials__set_username(credentials,user);
     if(pass) OnvifCredentials__set_password(credentials,pass);
 
-    return OMGR_SERIALIZABLE(OnvifMgrDeviceRow__new (NULL, onvif_dev, name, hardware, location));
+    OnvifMgrDeviceRow * new_row = (OnvifMgrDeviceRow *)OnvifMgrDeviceRow__new (NULL, onvif_dev, name, hardware, location, rtsp_port);
+    // The OnvifMgrDeviceRow__new function likely doesn't set rtsp_port directly if it's not a GObject property yet.
+    // If rtsp_port is a direct member of OnvifMgrDeviceRowPrivate, you might need to set it here after creation,
+    // or modify OnvifMgrDeviceRow__new to accept and set it.
+    // For now, assuming OnvifMgrDeviceRow__new will be updated or rtsp_port is handled by properties.
+    // If direct access is needed:
+    // OnvifMgrDeviceRowPrivate *priv = OnvifMgrDeviceRow__get_instance_private (new_row);
+    // if (rtsp_port) priv->rtsp_port = g_strdup(rtsp_port);
+
+    return OMGR_SERIALIZABLE(new_row);
 }
 
 static void
@@ -376,6 +402,7 @@ OnvifMgrDeviceRow__init (OnvifMgrDeviceRow * self)
     priv->profile = NULL;
     priv->owned = TRUE;
     priv->init = FALSE;
+    priv->rtsp_port = NULL;
 
     g_signal_connect (self, "notify::parent", G_CALLBACK (OnvifMgrDeviceRow_change_parent), NULL);
 
@@ -410,6 +437,11 @@ OnvifMgrDeviceRow__destroy (GtkWidget *object)
     if(priv->profile){
         g_object_unref(priv->profile);
         priv->profile = NULL;
+    }
+
+    if(priv->rtsp_port){
+        g_free(priv->rtsp_port);
+        priv->rtsp_port = NULL;
     }
 
     if (GTK_WIDGET_CLASS (OnvifMgrDeviceRow__parent_class)->destroy)
@@ -462,6 +494,10 @@ OnvifMgrDeviceRow__set_property (GObject      *object,
         case PROP_LOCATION:
             gui_set_label_text(priv->lbl_location,(char*)g_value_get_string(value));
             return;
+        case PROP_RTSP_PORT:
+            if (priv->rtsp_port) g_free (priv->rtsp_port);
+            priv->rtsp_port = g_value_dup_string (value);
+            return;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
             break;
@@ -491,6 +527,9 @@ OnvifMgrDeviceRow__get_property (GObject    *object,
         case PROP_LOCATION:
             g_value_set_string(value,gtk_label_get_text(GTK_LABEL(priv->lbl_location)));
             return;
+        case PROP_RTSP_PORT:
+            g_value_set_string (value, priv->rtsp_port);
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
             break;
@@ -567,18 +606,26 @@ OnvifMgrDeviceRow__class_init (OnvifMgrDeviceRowClass * klass)
                             NULL,
                             G_PARAM_CONSTRUCT | G_PARAM_READWRITE);
 
+    obj_properties[PROP_RTSP_PORT] =
+        g_param_spec_string ("rtsp-port",
+                            "RTSP Port",
+                            "Custom RTSP port for the device stream.",
+                            NULL, // Default value, can be empty or a common port like "554"
+                            G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+
     g_object_class_install_properties (object_class,
                                         N_PROPERTIES,
                                         obj_properties);
 }
 
-GtkWidget* OnvifMgrDeviceRow__new(OnvifApp * app, OnvifDevice * device, char * name, char * hardware, char * location){
+GtkWidget* OnvifMgrDeviceRow__new(OnvifApp * app, OnvifDevice * device, char * name, char * hardware, char * location, char * rtsp_port){
     return g_object_new (ONVIFMGR_TYPE_DEVICEROW,
                         "app",app,
                         "device",device,
                         "name",name,
                         "hardware",hardware,
                         "location",location,
+                        "rtsp-port", rtsp_port,
                         NULL);
 }
 

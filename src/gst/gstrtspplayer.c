@@ -30,6 +30,7 @@ struct _GstRtspPlayerSession {
     int retry;
     char * user;
     char * pass;
+    char * rtspport; // Dedicated RTSP port
     char * port_fallback;
     char * host_fallback;
     int enable_backchannel;
@@ -120,7 +121,7 @@ void player_signal_and_wait(GstRtspPlayer * self, guint signalid, ...){
     va_end(data.args);
 }
 
-static GstRtspPlayerSession * GstRtspPlayerSession__create(GstRtspPlayer * player, char * url, char * user, char * pass, char * fallback_host, char * fallback_port, void * user_data){
+static GstRtspPlayerSession * GstRtspPlayerSession__create(GstRtspPlayer * player, char * url, char * user, char * pass, char * rtspport, char * fallback_host, char * fallback_port, void * user_data){
     GstRtspPlayerSession * session = malloc(sizeof(GstRtspPlayerSession));
     session->player = player;
     session->user_data = user_data;
@@ -145,6 +146,14 @@ static GstRtspPlayerSession * GstRtspPlayerSession__create(GstRtspPlayer * playe
     } else {
         session->pass = malloc(strlen(pass)+1);
         strcpy(session->pass,pass);
+    }
+
+    //Update RTSP port
+    if(rtspport && strlen(rtspport) > 0){
+        session->rtspport = malloc(strlen(rtspport)+1);
+        strcpy(session->rtspport,rtspport);
+    } else {
+        session->rtspport = NULL;
     }
 
     //Update port fallback
@@ -184,6 +193,10 @@ static void GstRtspPlayerSession__destroy(GstRtspPlayerSession * session){
         if(GST_IS_ELEMENT(session->pipeline)){
             gst_object_unref (session->pipeline);
             session->pipeline = NULL;
+        }
+        if(session->rtspport){
+            free(session->rtspport);
+            session->rtspport = NULL;
         }
         if(session->port_fallback){
             free(session->port_fallback);
@@ -684,8 +697,33 @@ void GstRtspPlayerSession__play(GstRtspPlayerSession * session){
         g_object_set (G_OBJECT (session->src), "user-id", session->user, NULL);
     if(session->pass)
         g_object_set (G_OBJECT (session->src), "user-pw", session->pass, NULL);
-    if(session->location)
-        g_object_set (G_OBJECT (session->src), "location", session->location, NULL);
+
+    char * final_location = session->location;
+    if(session->rtspport && strlen(session->rtspport) > 0){
+        // Helper function URL__set_port might be available from url_parser.h
+        // Assuming it is, otherwise, this logic needs to be implemented.
+        char * temp_location_with_port = URL__set_port(session->location, session->rtspport);
+        if (temp_location_with_port) {
+            // If session->location was pointing to location_set, we might want to avoid freeing it
+            // or ensure URL__set_port allocates a new string.
+            // For now, assuming URL__set_port returns a new string and session->location might need freeing if it's not location_set
+            if (session->location != session->location_set && session->location != NULL) {
+                 //This case should not happen if location is always a copy of location_set or a result of URL__set_port/host
+                 //However, to be safe, let's only free if it's not pointing to location_set
+                 //free(session->location);
+            }
+            final_location = temp_location_with_port;
+             // session->location = temp_location_with_port; // Update session location if we want to keep it modified
+        }
+    }
+
+    if(final_location)
+        g_object_set (G_OBJECT (session->src), "location", final_location, NULL);
+
+    // If final_location was newly allocated by URL__set_port, and it's different from session->location, free it after use.
+    if (final_location != session->location && final_location != session->location_set) {
+        free(final_location);
+    }
 
     C_DEBUG("%s RtspPlayer__play retry[%i] - playing[%i]",session->location,session->retry,priv->playing);
     priv->playing = 1;
@@ -700,11 +738,11 @@ void GstRtspPlayerSession__play(GstRtspPlayerSession * session){
     P_MUTEX_UNLOCK(priv->player_lock);
 }
 
-void GstRtspPlayer__play(GstRtspPlayer* self, char *url, char * user, char * pass, char * fallback_host, char * fallback_port, void * user_data){
+void GstRtspPlayer__play(GstRtspPlayer* self, char *url, char * user, char * pass, char * rtspport, char * fallback_host, char * fallback_port, void * user_data){
     g_return_if_fail (self != NULL);
     g_return_if_fail (GST_IS_RTSPPLAYER (self));
 
-    GstRtspPlayerSession * session = GstRtspPlayerSession__create(self, url, user, pass, fallback_host, fallback_port, user_data);
+    GstRtspPlayerSession * session = GstRtspPlayerSession__create(self, url, user, pass, rtspport, fallback_host, fallback_port, user_data);
     GstRtspPlayerSession__play(session);
 }
 

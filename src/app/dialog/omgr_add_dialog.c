@@ -14,6 +14,7 @@ typedef struct {
     GtkWidget * txtuser;
     GtkWidget * txtpass;
     GtkWidget * chkhttps;
+    GtkWidget * txtrtspport;
 } OnvifMgrAddDialogPrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (OnvifMgrAddDialog, OnvifMgrAddDialog_, ONVIFMGR_TYPE_APPDIALOG)
@@ -54,6 +55,18 @@ const char *
 OnvifMgrAddDialog__get_pass(OnvifMgrAddDialog * self){
     OnvifMgrAddDialogPrivate *priv = OnvifMgrAddDialog__get_instance_private (self);
     return gtk_entry_get_text(GTK_ENTRY(priv->txtpass));
+}
+
+const char *
+OnvifMgrAddDialog__get_rtsp_port(OnvifMgrAddDialog * self){
+    OnvifMgrAddDialogPrivate *priv = OnvifMgrAddDialog__get_instance_private (self);
+    const char * rtsp_port = gtk_entry_get_text(GTK_ENTRY(priv->txtrtspport));
+    if(!rtsp_port || strlen(rtsp_port) == 0){
+        // You might want a default placeholder or leave it empty if it's optional
+        // For now, returning empty if not set.
+        return "";
+    }
+    return rtsp_port;
 }
 
 static void 
@@ -178,6 +191,22 @@ OnvifMgrAddDialog__create_ui(OnvifMgrAppDialog * app_dialog){
     gtk_widget_set_hexpand (priv->txtpass, TRUE);
     gtk_grid_attach (GTK_GRID (grid), priv->txtpass, 1, 5, 1, 1);
 
+    widget = gtk_label_new("RTSP Port (optional):");
+    gtk_widget_set_hexpand (widget, TRUE);
+    gtk_grid_attach (GTK_GRID (grid), widget, 0, 6, 1, 1);
+    gtk_widget_set_halign (widget, GTK_ALIGN_END);
+
+    priv->txtrtspport = gtk_entry_new();
+    gtk_widget_set_margin_end(priv->txtrtspport,10);
+    gtk_entry_set_width_chars(GTK_ENTRY(priv->txtrtspport),5);
+    gtk_widget_set_hexpand (priv->txtrtspport, FALSE);
+    g_signal_connect(G_OBJECT(priv->txtrtspport), "insert-text", G_CALLBACK(OnvifMgrAddDialog__port_text_validate), NULL);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(priv->txtrtspport),"554"); // Default RTSP port
+
+    GtkWidget* rtspport_vbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_pack_start(GTK_BOX(rtspport_vbox), priv->txtrtspport, FALSE, FALSE, 0);
+    gtk_grid_attach (GTK_GRID (grid), rtspport_vbox, 1, 6, 1, 1);
+
     g_object_set (app_dialog, 
             "title-label", ONVIFMGR_ADDDIALOG_TITLE,
             "submit-label", ONVIFMGR_ADDDIALOG_SUBMIT_LABEL,
@@ -198,6 +227,7 @@ OnvifMgrAddDialog__showing (GtkWidget *widget){
     gtk_entry_set_text(GTK_ENTRY(priv->txtport),"");
     gtk_entry_set_text(GTK_ENTRY(priv->txtuser),"");
     gtk_entry_set_text(GTK_ENTRY(priv->txtpass),"");
+    gtk_entry_set_text(GTK_ENTRY(priv->txtrtspport),"");
     g_object_set(self,"error",NULL,NULL);
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON(priv->chkhttps),FALSE);
 }
